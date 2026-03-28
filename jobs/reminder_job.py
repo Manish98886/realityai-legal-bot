@@ -1,5 +1,5 @@
+import asyncio
 import logging
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from database import get_hearings_for_reminder, mark_hearing_reminder_sent, get_case
 from config import REMINDER_DAYS_BEFORE
 
@@ -7,10 +7,8 @@ logger = logging.getLogger(__name__)
 
 
 def setup_reminder_job(app):
-    """Setup APScheduler job for hearing reminders."""
-    scheduler = AsyncIOScheduler()
-
-    async def send_reminders():
+    """Setup reminder job using python-telegram-bot's built-in job_queue."""
+    async def job_callback(context):
         """Check and send hearing reminders."""
         try:
             hearings = get_hearings_for_reminder(REMINDER_DAYS_BEFORE)
@@ -29,7 +27,7 @@ def setup_reminder_job(app):
                     f"2 din baad hearing hai — tayyari ensure karein!"
                 )
                 try:
-                    await app.bot.send_message(chat_id=user_id, text=msg)
+                    await context.bot.send_message(chat_id=user_id, text=msg)
                     mark_hearing_reminder_sent(h["id"])
                     logger.info(f"Reminder sent: hearing #{h['id']} to user {user_id}")
                 except Exception as e:
@@ -37,7 +35,6 @@ def setup_reminder_job(app):
         except Exception as e:
             logger.error(f"Reminder job error: {e}")
 
-    # Run every 2 hours
-    scheduler.add_job(send_reminders, 'interval', hours=2, id='hearing_reminder')
-    scheduler.start()
-    logger.info(f"Reminder scheduler started (every 2h, {REMINDER_DAYS_BEFORE} days before hearing)")
+    # Use telegram-bot's built-in job queue (runs every 2 hours)
+    app.job_queue.run_repeating(job_callback, interval=7200, first=10, name="hearing_reminder")
+    logger.info(f"Reminder job registered (every 2h, {REMINDER_DAYS_BEFORE} days before hearing)")
