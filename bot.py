@@ -101,6 +101,10 @@ def main():
         setup_reminder_job(app)
         logger.info("Reminder job enabled")
 
+    # Start health server for Render
+    from health_server import start_health_server
+    start_health_server(int(os.environ.get("PORT", 10000)))
+
     logger.info("Bot starting... RealityAi Lawyer is live!")
     app.run_polling(drop_pending_updates=True)
 
