@@ -1,0 +1,31 @@
+services:
+  - type: worker
+    name: realityai-lawyer-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: OWNER_ID
+        sync: false
+      - key: AI_PROVIDER
+        value: openrouter
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: z-ai/glm-5-turbo
+      - key: DATABASE_PATH
+        value: /opt/render/project/src/data/lawyer_bot.db
+      - key: REMINDER_ENABLED
+        value: true
+      - key: REMINDER_DAYS_BEFORE
+        value: "2"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash

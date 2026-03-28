@@ -1,4 +1,9 @@
-runtime.txt
-requirements.txt
-render.yaml
+__pycache__/
+*.pyc
+*.pyo
 .env
+data/
+bot.log
+.git/
+venv/
+*.db
