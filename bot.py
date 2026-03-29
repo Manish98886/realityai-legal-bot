@@ -5,10 +5,13 @@ import os
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import httpx
+from telegram.error import TimedOut
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ConversationHandler, filters
 from config import BOT_TOKEN, OWNER_ID, REMINDER_ENABLED
 from database import init_db, get_or_create_user, log_stat
 from ai_engine import SYSTEM_PROMPT
+from retry_utils import run_with_retry
 
 # Configure logging
 logging.basicConfig(
@@ -39,6 +42,11 @@ from jobs.reminder_job import setup_reminder_job
 
 async def error_handler(update, context):
     """Global error handler."""
+    # Timeouts are transient network issues — log as warning, don't alarm.
+    if isinstance(context.error, (TimedOut, httpx.ReadTimeout, httpx.ConnectTimeout)):
+        logger.warning("Telegram API timeout (will recover automatically): %s", context.error)
+        return
+
     logger.error(f"Error: {context.error}", exc_info=context.error)
     if update and update.effective_message:
         try:
@@ -56,7 +64,15 @@ def main():
     init_db()
 
     logger.info("Building application...")
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = (
+        ApplicationBuilder()
+        .token(BOT_TOKEN)
+        .read_timeout(30)
+        .write_timeout(10)
+        .connect_timeout(10)
+        .get_updates_read_timeout(45)
+        .build()
+    )
 
     # --- Conversation Handlers ---
     app.add_handler(register_conv)
@@ -106,7 +122,33 @@ def main():
     start_health_server(int(os.environ.get("PORT", 10000)))
 
     logger.info("Bot starting... RealityAi Lawyer is live!")
-    app.run_polling(drop_pending_updates=True)
+
+    attempt = 0
+    max_attempts = 5
+    backoff = 1  # seconds
+    while True:
+        try:
+            app.run_polling(drop_pending_updates=True)
+            break  # clean exit — no retry needed
+        except (TimedOut, httpx.ReadTimeout, httpx.ConnectTimeout) as exc:
+            attempt += 1
+            if attempt > max_attempts:
+                logger.error(
+                    "Polling failed after %d attempts. Giving up. Last error: %s",
+                    max_attempts,
+                    exc,
+                )
+                raise
+            logger.warning(
+                "Polling timeout (attempt %d/%d): %s — restarting in %ds…",
+                attempt,
+                max_attempts,
+                exc,
+                backoff,
+            )
+            import time
+            time.sleep(backoff)
+            backoff *= 2
 
 
 if __name__ == "__main__":
